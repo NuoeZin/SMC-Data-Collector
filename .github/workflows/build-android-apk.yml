@@ -46,12 +46,20 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "buildozer>=1.5,<2" "cython>=0.29,<3.1"
 
+      - name: Prepare complete FreeType source
+        run: |
+          git clone --depth 1 --branch VER-2-14-1 \
+            --recurse-submodules --shallow-submodules \
+            https://github.com/freetype/freetype.git \
+            "$RUNNER_TEMP/freetype"
+          test -f "$RUNNER_TEMP/freetype/subprojects/dlg/include/dlg/output.h"
+
       - name: Build APK
         env:
           BUILDOZER_WARN_ON_ROOT: "0"
-          # Savannah intermittently returns 502/504 to GitHub-hosted runners.
-          # python-for-android supports per-recipe URL overrides.
-          URL_freetype: https://github.com/freetype/freetype/archive/refs/tags/VER-2-14-1.tar.gz
+          # Use a recursive clone: release snapshots from GitHub omit dlg,
+          # while Savannah intermittently returns 502/504 to hosted runners.
+          P4A_freetype_DIR: ${{ runner.temp }}/freetype
         run: |
           for attempt in 1 2 3; do
             echo "Build attempt ${attempt}/3"
