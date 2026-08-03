@@ -49,6 +49,9 @@ jobs:
       - name: Build APK
         env:
           BUILDOZER_WARN_ON_ROOT: "0"
+          # Savannah intermittently returns 502/504 to GitHub-hosted runners.
+          # python-for-android supports per-recipe URL overrides.
+          URL_freetype: https://github.com/freetype/freetype/archive/refs/tags/VER-2-14-1.tar.gz
         run: |
           for attempt in 1 2 3; do
             echo "Build attempt ${attempt}/3"
