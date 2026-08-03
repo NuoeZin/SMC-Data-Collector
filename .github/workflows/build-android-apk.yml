@@ -35,6 +35,12 @@ jobs:
             libltdl-dev libncurses5-dev libncursesw5-dev libssl-dev \
             libtool libtool-bin pkg-config unzip zip zlib1g-dev
 
+      - name: Prefer IPv4 for dependency downloads
+        run: |
+          echo 'precedence ::ffff:0:0/96  100' | sudo tee -a /etc/gai.conf
+          curl -4 --retry 5 --retry-all-errors --connect-timeout 20 \
+            --fail --silent --show-error https://github.com/ > /dev/null
+
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip setuptools wheel
