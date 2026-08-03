@@ -43,7 +43,19 @@ jobs:
       - name: Build APK
         env:
           BUILDOZER_WARN_ON_ROOT: "0"
-        run: buildozer android debug
+        run: |
+          for attempt in 1 2 3; do
+            echo "Build attempt ${attempt}/3"
+            if buildozer android debug; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Build failed after 3 attempts."
+              exit 1
+            fi
+            echo "Temporary build/download failure; retrying in 30 seconds..."
+            sleep 30
+          done
 
       - name: List build output
         if: always()
