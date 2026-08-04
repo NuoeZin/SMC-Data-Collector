@@ -65,8 +65,9 @@ bash 安卓打包.sh
 buildozer android deploy run
 ```
 
-应用需要联网读取地图数据。文件保存在 Android 应用私有目录中；TXT 和 HTML
-结果可以通过界面底部的“分享结果”调用系统分享，XLSX 仍会在应用目录中生成。
+应用需要联网读取地图数据。结果会发布到系统 `Download/SMap_file` 目录，界面底部
+的“定位文件”按钮会调用文件管理器打开该位置。Android 9 及以下首次启动时请求
+存储权限；Android 10 及以上使用系统 MediaStore 分区存储，不需要传统存储权限。
 
 ### GitHub Actions 云编译（无需 WSL）
 

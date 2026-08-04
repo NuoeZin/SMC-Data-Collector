@@ -145,6 +145,34 @@ KV = r"""
             height: dp(46)
             on_release: root.dismiss()
 
+<StoragePermissionPopup>:
+    title: "存储权限"
+    title_font: app.font_name
+    size_hint: (0.88, 0.46)
+    auto_dismiss: False
+    separator_color: app.primary_color
+    background: ""
+    background_color: app.surface_color
+    BoxLayout:
+        orientation: "vertical"
+        padding: dp(18)
+        spacing: dp(14)
+        Label:
+            text: "SMC信息生成器需要保存生成的报表。\n\n文件将写入：\n内部存储/Download/SMap_file\n\nAndroid 10及以上由系统分区存储安全管理；旧版系统会继续显示系统权限请求。"
+            font_name: app.font_name
+            color: app.text_color
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+        Button:
+            text: "允许并继续"
+            font_name: app.font_name
+            background_normal: ""
+            background_color: app.primary_color
+            size_hint_y: None
+            height: dp(46)
+            on_release: app.confirm_storage_permission(root)
+
 BoxLayout:
     orientation: "vertical"
     padding: dp(16)
@@ -247,12 +275,6 @@ BoxLayout:
                 size_hint_y: None
                 height: max(dp(150), self.texture_size[1] + dp(18))
 
-    ProgressBar:
-        max: 1
-        value: 0 if app.busy else 1
-        size_hint_y: None
-        height: dp(5)
-
     BoxLayout:
         size_hint_y: None
         height: dp(48)
@@ -281,13 +303,17 @@ class SettingsPopup(Popup):
     pass
 
 
+class StoragePermissionPopup(Popup):
+    pass
+
+
 class SimmcGDPApp(App):
     font_name = StringProperty(APP_FONT)
     status = StringProperty("请选择内容后点击“开始生成”。")
     output_format = StringProperty("HTML")
     busy = BooleanProperty(False)
     has_results = BooleanProperty(False)
-    is_dark = BooleanProperty(True)
+    is_dark = BooleanProperty(False)
     about_text = StringProperty("SMC信息生成器\n版本 1.0.0\n\n用于生成 Simmc 地图数据排行与报表。")
 
     bg_color = ListProperty([0.055, 0.075, 0.11, 1])
@@ -309,13 +335,15 @@ class SimmcGDPApp(App):
     def build(self):
         self.title = "SMC信息生成器"
         self.settings_store = JsonStore(str(Path(self.user_data_dir) / "settings.json"))
-        saved_dark = self.settings_store.get("appearance").get("dark", True) if self.settings_store.exists("appearance") else True
+        saved_dark = self.settings_store.get("appearance").get("dark", False) if self.settings_store.exists("appearance") else False
         self.set_dark_mode(bool(saved_dark), save=False)
         self._load_about_text()
         self.generated_files: list[Path] = []
-        self.public_location = "Download/SimmcGDP"
-        self._request_storage_permission()
-        return Builder.load_string(KV)
+        self.public_location = "Download/SMap_file"
+        root = Builder.load_string(KV)
+        if not self.settings_store.exists("storage_notice"):
+            Clock.schedule_once(lambda _dt: StoragePermissionPopup().open(), 0.5)
+        return root
 
     def _load_about_text(self) -> None:
         about_path = Path(__file__).resolve().parent / "somesin.txt"
@@ -350,6 +378,11 @@ class SimmcGDPApp(App):
 
     def open_settings(self) -> None:
         SettingsPopup().open()
+
+    def confirm_storage_permission(self, popup: Popup) -> None:
+        self.settings_store.put("storage_notice", accepted=True)
+        popup.dismiss()
+        self._request_storage_permission()
 
     @property
     def output_dir(self) -> Path:
@@ -461,17 +494,19 @@ class SimmcGDPApp(App):
             downloads = Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS
             )
-            target_dir = Path(str(downloads.getAbsolutePath())) / "SimmcGDP"
+            target_dir = Path(str(downloads.getAbsolutePath())) / "SMap_file"
             target_dir.mkdir(parents=True, exist_ok=True)
             for path in paths:
                 (target_dir / path.name).write_bytes(path.read_bytes())
             return str(target_dir)
 
         MediaStore = autoclass("android.provider.MediaStore")
+        Downloads = autoclass("android.provider.MediaStore$Downloads")
+        MediaColumns = autoclass("android.provider.MediaStore$MediaColumns")
         ContentValues = autoclass("android.content.ContentValues")
         activity = autoclass("org.kivy.android.PythonActivity").mActivity
         resolver = activity.getContentResolver()
-        collection = MediaStore.Downloads.getContentUri(
+        collection = Downloads.getContentUri(
             MediaStore.VOLUME_EXTERNAL_PRIMARY
         )
         mime_types = {
@@ -481,10 +516,10 @@ class SimmcGDPApp(App):
         }
         for path in paths:
             values = ContentValues()
-            values.put(MediaStore.MediaColumns.DISPLAY_NAME, path.name)
-            values.put(MediaStore.MediaColumns.MIME_TYPE, mime_types.get(path.suffix, "application/octet-stream"))
-            values.put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/SimmcGDP")
-            values.put(MediaStore.MediaColumns.IS_PENDING, 1)
+            values.put(MediaColumns.DISPLAY_NAME, path.name)
+            values.put(MediaColumns.MIME_TYPE, mime_types.get(path.suffix, "application/octet-stream"))
+            values.put(MediaColumns.RELATIVE_PATH, "Download/SMap_file")
+            values.put(MediaColumns.IS_PENDING, 1)
             uri = resolver.insert(collection, values)
             if uri is None:
                 raise OSError(f"无法在下载目录创建 {path.name}")
@@ -495,9 +530,9 @@ class SimmcGDPApp(App):
             finally:
                 stream.close()
             ready = ContentValues()
-            ready.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            ready.put(MediaColumns.IS_PENDING, 0)
             resolver.update(uri, ready, None, None)
-        return "内部存储/Download/SimmcGDP"
+        return "内部存储/Download/SMap_file"
 
     def locate_files(self) -> None:
         """Open Android's system file manager at the result directory."""
@@ -512,7 +547,7 @@ class SimmcGDPApp(App):
             DocumentsContract = autoclass("android.provider.DocumentsContract")
             activity = autoclass("org.kivy.android.PythonActivity").mActivity
             folder_uri = Uri.parse(
-                "content://com.android.externalstorage.documents/document/primary%3ADownload%2FSimmcGDP"
+                "content://com.android.externalstorage.documents/document/primary%3ADownload%2FSMap_file"
             )
             intent = Intent(Intent.ACTION_VIEW)
             intent.setDataAndType(folder_uri, "vnd.android.document/directory")
@@ -524,7 +559,7 @@ class SimmcGDPApp(App):
                 picker.putExtra(DocumentsContract.EXTRA_INITIAL_URI, folder_uri)
                 activity.startActivity(picker)
         except Exception as exc:
-            self.status = f"无法打开文件管理器：{exc}\n文件位于 Download/SimmcGDP"
+            self.status = f"无法打开文件管理器：{exc}\n文件位于 Download/SMap_file"
 
 
 if __name__ == "__main__":
