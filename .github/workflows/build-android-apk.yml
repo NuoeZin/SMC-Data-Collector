@@ -53,6 +53,9 @@ jobs:
             https://github.com/freetype/freetype.git \
             "$RUNNER_TEMP/freetype"
           test -f "$RUNNER_TEMP/freetype/subprojects/dlg/include/dlg/output.h"
+          cd "$RUNNER_TEMP/freetype"
+          ./autogen.sh
+          test -x ./configure
 
       - name: Build APK
         env:
