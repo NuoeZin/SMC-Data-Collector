@@ -5,25 +5,32 @@ import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.ImageDecoder
+import android.graphics.drawable.AnimatedImageDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.widget.ImageView
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -93,13 +100,17 @@ private fun SMCApp(activity: MainActivity, initialDark: Boolean, saveDark: (Bool
                 permissionInfo = false; activity.requestLegacyStorage()
             }) { Text("允许并继续") } },
         )
-        if (settings) SettingsDialog(dark, { dark = it; saveDark(it) }, { settings = false })
-        Scaffold(topBar = {
-            TopAppBar(
-                title = { Column { Text("SMC信息生成器", fontWeight = FontWeight.SemiBold); Text("地图数据排行与报表", style = MaterialTheme.typography.labelMedium) } },
-                actions = { IconButton(onClick = { settings = true }) { Icon(Icons.Outlined.Settings, "设置") } },
-            )
-        }) { padding -> MainScreen(activity, Modifier.padding(padding)) }
+        if (settings) {
+            BackHandler { settings = false }
+            SettingsScreen(dark, { dark = it; saveDark(it) }, { settings = false })
+        } else {
+            Scaffold(topBar = {
+                TopAppBar(
+                    title = { Column { Text("SMC信息生成器", fontWeight = FontWeight.SemiBold); Text("地图数据排行与报表", style = MaterialTheme.typography.labelMedium) } },
+                    actions = { IconButton(onClick = { settings = true }) { Icon(Icons.Outlined.Settings, "设置") } },
+                )
+            }) { padding -> MainScreen(activity, Modifier.padding(padding)) }
+        }
     }
 }
 
@@ -115,19 +126,24 @@ private fun MainScreen(activity: MainActivity, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     Column(modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("生成内容", style = MaterialTheme.typography.titleMedium)
-        Option("国家首都排行 + 国家总体排行", tasks.gdp) { tasks = tasks.copy(gdp = it) }
-        Option("全部领地坐标及区块", tasks.territories) { tasks = tasks.copy(territories = it) }
-        Option("国家所有领地区块排行", tasks.chunks) { tasks = tasks.copy(chunks = it) }
-        Option("国家首都坐标表", tasks.capitals) { tasks = tasks.copy(capitals = it) }
-        Option("港口和驿站坐标及归属", tasks.gateways) { tasks = tasks.copy(gateways = it) }
-        Option("国家与独立领地人口排行", tasks.population) { tasks = tasks.copy(population = it) }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(vertical = 4.dp)) {
+                Option("国家首都排行 + 国家总体排行", tasks.gdp) { tasks = tasks.copy(gdp = it) }
+                Option("全部领地坐标及区块", tasks.territories) { tasks = tasks.copy(territories = it) }
+                Option("国家所有领地区块排行", tasks.chunks) { tasks = tasks.copy(chunks = it) }
+                Option("国家首都坐标表", tasks.capitals) { tasks = tasks.copy(capitals = it) }
+                Option("港口和驿站坐标及归属", tasks.gateways) { tasks = tasks.copy(gateways = it) }
+                Option("国家与独立领地人口排行", tasks.population) { tasks = tasks.copy(population = it) }
+            }
+        }
         ExposedDropdownMenuBox(expanded, { expanded = !expanded }) {
             OutlinedTextField(format.name, {}, readOnly = true, label = { Text("保存格式") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
             ExposedDropdownMenu(expanded, { expanded = false }) { OutputFormat.entries.forEach { DropdownMenuItem({ Text(it.name) }, { format = it; expanded = false }) } }
         }
         Card(Modifier.fillMaxWidth()) { Text(status, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium) }
-        Button(
-            onClick = {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                onClick = {
                 if (!listOf(tasks.gdp, tasks.territories, tasks.chunks, tasks.capitals, tasks.gateways, tasks.population).any { it }) { status = "请至少选择一种输出内容。"; return@Button }
                 busy = true; hasResults = false; status = "正在下载并处理地图数据……"
                 scope.launch {
@@ -136,22 +152,70 @@ private fun MainScreen(activity: MainActivity, modifier: Modifier = Modifier) {
                         .onFailure { status = "生成失败：${it.message}" }
                     busy = false
                 }
-            }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) { Text(if (busy) "正在生成…" else "开始生成") }
-        OutlinedButton(onClick = activity::locateFiles, enabled = hasResults, modifier = Modifier.fillMaxWidth().height(50.dp)) { Icon(Icons.Outlined.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("定位文件") }
+                }, enabled = !busy, modifier = Modifier.weight(1f).height(50.dp),
+            ) { Text(if (busy) "正在生成…" else "开始生成") }
+            OutlinedButton(onClick = activity::locateFiles, enabled = hasResults, modifier = Modifier.weight(1f).height(50.dp)) {
+                Icon(Icons.Outlined.FolderOpen, null); Spacer(Modifier.width(6.dp)); Text("定位文件")
+            }
+        }
     }
 }
 
 @Composable private fun Option(text: String, checked: Boolean, changed: (Boolean) -> Unit) {
-    Card(onClick = { changed(!checked) }, modifier = Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Text(text, Modifier.weight(1f)); Checkbox(checked, changed) } }
+    Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 1.dp, bottom = 1.dp), verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked, changed)
+        TextButton(onClick = { changed(!checked) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
+            Text(text, Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurface)
+        }
+    }
 }
 
-@Composable private fun SettingsDialog(dark: Boolean, setDark: (Boolean) -> Unit, close: () -> Unit) {
-    AlertDialog(onDismissRequest = close, title = { Text("设置") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Text("暗色模式", Modifier.weight(1f)); Switch(dark, setDark) }
-            HorizontalDivider(); Text("关于", style = MaterialTheme.typography.titleMedium)
-            Text("SMC信息生成器\n版本 1.0.0\n\n从 Simmc 网页地图获取领地数据，生成 GDP、区块、人口和坐标报表。")
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable private fun SettingsScreen(dark: Boolean, setDark: (Boolean) -> Unit, back: () -> Unit) {
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("设置") },
+            navigationIcon = { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回") } },
+        )
+    }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { Text("暗色模式", style = MaterialTheme.typography.titleMedium); Text("切换应用界面的明暗外观", style = MaterialTheme.typography.bodySmall) }
+                    Switch(dark, setDark)
+                }
+            }
+            Text("关于", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("SMC信息生成器", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("版本 1.0.0")
+                    HorizontalDivider()
+                    Text("从SIMMC网页地图获取相关信息做出排列和收集操作\n来源于一个叫“洛*”啥子的奇思妙想")
+                    AboutGif(Modifier.fillMaxWidth().height(220.dp))
+                }
+            }
+            Spacer(Modifier.height(16.dp))
         }
-    }, confirmButton = { TextButton(onClick = close) { Text("完成") } })
+    }
+}
+
+@Composable private fun AboutGif(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    AndroidView(
+        modifier = modifier,
+        factory = {
+            ImageView(context).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                if (Build.VERSION.SDK_INT >= 28) {
+                    val source = ImageDecoder.createSource(resources, R.drawable.wesdaio)
+                    val drawable = ImageDecoder.decodeDrawable(source)
+                    setImageDrawable(drawable)
+                    (drawable as? AnimatedImageDrawable)?.apply { repeatCount = AnimatedImageDrawable.REPEAT_INFINITE; start() }
+                } else {
+                    setImageResource(R.drawable.wesdaio)
+                }
+            }
+        },
+    )
 }
