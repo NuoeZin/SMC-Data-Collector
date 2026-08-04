@@ -9,10 +9,13 @@ from pathlib import Path
 import simmc_gdp
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.core.window import Window
 from kivy.core.text import LabelBase
 from kivy.lang import Builder
-from kivy.properties import BooleanProperty, StringProperty
+from kivy.properties import BooleanProperty, ListProperty, StringProperty
+from kivy.storage.jsonstore import JsonStore
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.popup import Popup
 from kivy.utils import platform
 
 
@@ -38,10 +41,19 @@ KV = r"""
 
 <OptionRow>:
     size_hint_y: None
-    height: dp(42)
+    height: dp(46)
+    padding: dp(10), 0
+    canvas.before:
+        Color:
+            rgba: app.card_color
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(10)]
     Label:
         text: root.option_text
         font_name: app.font_name
+        color: app.text_color
         halign: "left"
         valign: "middle"
         text_size: self.size
@@ -51,18 +63,128 @@ KV = r"""
         width: dp(48)
         on_active: root.option_active = self.active
 
+<SpinnerOption>:
+    font_name: app.font_name
+
+<SettingsPopup>:
+    title: "设置"
+    title_font: app.font_name
+    size_hint: (0.9, 0.74)
+    separator_color: app.primary_color
+    background: ""
+    background_color: app.surface_color
+    BoxLayout:
+        orientation: "vertical"
+        padding: dp(18)
+        spacing: dp(14)
+        canvas.before:
+            Color:
+                rgba: app.surface_color
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        Label:
+            text: "外观"
+            font_name: app.font_name
+            bold: True
+            color: app.text_color
+            halign: "left"
+            text_size: self.size
+            size_hint_y: None
+            height: dp(34)
+        BoxLayout:
+            size_hint_y: None
+            height: dp(48)
+            Label:
+                text: "暗色模式"
+                font_name: app.font_name
+                color: app.text_color
+                halign: "left"
+                text_size: self.size
+            Switch:
+                active: app.is_dark
+                on_active: app.set_dark_mode(self.active)
+
+        Widget:
+            size_hint_y: None
+            height: dp(1)
+            canvas:
+                Color:
+                    rgba: app.divider_color
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+
+        Label:
+            text: "关于"
+            font_name: app.font_name
+            bold: True
+            color: app.text_color
+            halign: "left"
+            text_size: self.size
+            size_hint_y: None
+            height: dp(34)
+        ScrollView:
+            do_scroll_x: False
+            Label:
+                text: app.about_text
+                font_name: app.font_name
+                color: app.secondary_text_color
+                halign: "left"
+                valign: "top"
+                text_size: self.width, None
+                size_hint_y: None
+                height: max(self.texture_size[1] + dp(12), dp(100))
+        Button:
+            text: "完成"
+            font_name: app.font_name
+            background_normal: ""
+            background_color: app.primary_color
+            size_hint_y: None
+            height: dp(46)
+            on_release: root.dismiss()
+
 BoxLayout:
     orientation: "vertical"
-    padding: dp(14)
-    spacing: dp(9)
+    padding: dp(16)
+    spacing: dp(12)
+    canvas.before:
+        Color:
+            rgba: app.bg_color
+        Rectangle:
+            pos: self.pos
+            size: self.size
 
-    Label:
-        text: "Simmc 信息生成器"
-        font_name: app.font_name
-        font_size: "22sp"
-        bold: True
+    BoxLayout:
         size_hint_y: None
-        height: dp(44)
+        height: dp(62)
+        BoxLayout:
+            orientation: "vertical"
+            Label:
+                text: "SMC信息生成器"
+                font_name: app.font_name
+                color: app.primary_color
+                font_size: "23sp"
+                bold: True
+                halign: "left"
+                text_size: self.size
+            Label:
+                text: "地图数据排行与报表"
+                font_name: app.font_name
+                color: app.secondary_text_color
+                font_size: "13sp"
+                halign: "left"
+                text_size: self.size
+        Button:
+            text: "设置"
+            font_name: app.font_name
+            color: app.primary_color
+            background_normal: ""
+            background_color: (0, 0, 0, 0)
+            size_hint_x: None
+            width: dp(64)
+            on_release: app.open_settings()
 
     ScrollView:
         do_scroll_x: False
@@ -71,6 +193,7 @@ BoxLayout:
             size_hint_y: None
             height: self.minimum_height
             spacing: dp(2)
+            padding: 0, dp(4)
 
             OptionRow:
                 option_text: "国家首都排行 + 国家总体排行"
@@ -100,6 +223,7 @@ BoxLayout:
             Label:
                 text: "保存格式"
                 font_name: app.font_name
+                color: app.secondary_text_color
                 halign: "left"
                 text_size: self.size
                 size_hint_y: None
@@ -110,11 +234,13 @@ BoxLayout:
                 font_name: app.font_name
                 size_hint_y: None
                 height: dp(44)
+                background_color: app.primary_color
                 on_text: app.output_format = self.text
 
             Label:
                 text: app.status
                 font_name: app.font_name
+                color: app.secondary_text_color
                 halign: "left"
                 valign: "top"
                 text_size: self.width, None
@@ -134,13 +260,15 @@ BoxLayout:
         Button:
             text: "开始生成"
             font_name: app.font_name
+            background_color: app.primary_color
             disabled: app.busy
             on_release: app.start_generation()
         Button:
-            text: "分享结果"
+            text: "定位文件"
             font_name: app.font_name
+            background_color: app.success_color
             disabled: app.busy or not app.has_results
-            on_release: app.share_results()
+            on_release: app.locate_files()
 """
 
 
@@ -149,12 +277,27 @@ class OptionRow(BoxLayout):
     option_active = BooleanProperty(True)
 
 
+class SettingsPopup(Popup):
+    pass
+
+
 class SimmcGDPApp(App):
     font_name = StringProperty(APP_FONT)
     status = StringProperty("请选择内容后点击“开始生成”。")
     output_format = StringProperty("HTML")
     busy = BooleanProperty(False)
     has_results = BooleanProperty(False)
+    is_dark = BooleanProperty(True)
+    about_text = StringProperty("SMC信息生成器\n版本 1.0.0\n\n用于生成 Simmc 地图数据排行与报表。")
+
+    bg_color = ListProperty([0.055, 0.075, 0.11, 1])
+    surface_color = ListProperty([0.085, 0.11, 0.16, 1])
+    card_color = ListProperty([0.12, 0.16, 0.23, 1])
+    text_color = ListProperty([0.9, 0.94, 1, 1])
+    secondary_text_color = ListProperty([0.62, 0.7, 0.8, 1])
+    divider_color = ListProperty([0.25, 0.3, 0.38, 1])
+    primary_color = ListProperty([0.12, 0.56, 0.9, 1])
+    success_color = ListProperty([0.16, 0.62, 0.4, 1])
 
     gdp_selected = BooleanProperty(True)
     territories_selected = BooleanProperty(True)
@@ -164,9 +307,49 @@ class SimmcGDPApp(App):
     population_selected = BooleanProperty(True)
 
     def build(self):
-        self.title = "Simmc 信息生成器"
+        self.title = "SMC信息生成器"
+        self.settings_store = JsonStore(str(Path(self.user_data_dir) / "settings.json"))
+        saved_dark = self.settings_store.get("appearance").get("dark", True) if self.settings_store.exists("appearance") else True
+        self.set_dark_mode(bool(saved_dark), save=False)
+        self._load_about_text()
         self.generated_files: list[Path] = []
+        self.public_location = "Download/SimmcGDP"
+        self._request_storage_permission()
         return Builder.load_string(KV)
+
+    def _load_about_text(self) -> None:
+        about_path = Path(__file__).resolve().parent / "somesin.txt"
+        try:
+            custom = about_path.read_text(encoding="utf-8-sig").strip()
+        except OSError:
+            custom = ""
+        base = "SMC信息生成器\n版本 1.0.0\n\n用于生成 Simmc 地图数据排行与报表。"
+        self.about_text = base + (("\n\n" + custom) if custom else "")
+
+    def set_dark_mode(self, enabled: bool, save: bool = True) -> None:
+        self.is_dark = enabled
+        if enabled:
+            self.bg_color = [0.055, 0.075, 0.11, 1]
+            self.surface_color = [0.085, 0.11, 0.16, 1]
+            self.card_color = [0.12, 0.16, 0.23, 1]
+            self.text_color = [0.9, 0.94, 1, 1]
+            self.secondary_text_color = [0.62, 0.7, 0.8, 1]
+            self.divider_color = [0.25, 0.3, 0.38, 1]
+            self.primary_color = [0.18, 0.62, 0.95, 1]
+        else:
+            self.bg_color = [0.96, 0.97, 0.985, 1]
+            self.surface_color = [1, 1, 1, 1]
+            self.card_color = [1, 1, 1, 1]
+            self.text_color = [0.1, 0.13, 0.18, 1]
+            self.secondary_text_color = [0.36, 0.41, 0.48, 1]
+            self.divider_color = [0.82, 0.84, 0.88, 1]
+            self.primary_color = [0.04, 0.42, 0.76, 1]
+        Window.clearcolor = self.bg_color
+        if save and hasattr(self, "settings_store"):
+            self.settings_store.put("appearance", dark=enabled)
+
+    def open_settings(self) -> None:
+        SettingsPopup().open()
 
     @property
     def output_dir(self) -> Path:
@@ -239,11 +422,12 @@ class SimmcGDPApp(App):
                 generated.append(output_dir / "国家及独立领地玩家总数排行.txt")
 
             converted = simmc_gdp.convert_text_outputs(generated, output_format)
+            published = self._publish_to_downloads(converted)
             joined = sum(land.nation is not None for land in lands)
             details = [
                 f"生成完成：{len(converted)} 个 {output_format.upper()} 文件。",
                 f"共解析 {len(lands)} 块领地，{joined} 块属于国家。",
-                f"保存位置：{output_dir}",
+                f"保存位置：{published}",
             ]
             if skipped:
                 details.append(f"跳过 {skipped} 个字段不完整的标记。")
@@ -252,38 +436,95 @@ class SimmcGDPApp(App):
         except Exception as exc:
             self._finish(f"生成失败：{exc}")
 
-    def share_results(self) -> None:
-        """Open Android's share sheet with textual output content."""
-        if not self.generated_files:
-            return
-        text_parts = []
-        for path in self.generated_files:
-            if path.suffix.lower() in {".txt", ".html"}:
-                try:
-                    text_parts.append(f"【{path.name}】\n{path.read_text(encoding='utf-8-sig')}")
-                except OSError:
-                    continue
-        if not text_parts:
-            self.status = "XLSX 文件已生成；请选择 TXT 或 HTML 格式后可直接分享文本。"
-            return
-        share_text = "\n\n".join(text_parts)
+    def _request_storage_permission(self) -> None:
+        """Request legacy storage access only where Android still uses it."""
         if platform != "android":
-            self.status = "分享功能仅在 Android 上可用。\n" + self.status
+            return
+        try:
+            from android.permissions import Permission, request_permissions
+            from jnius import autoclass
+
+            if autoclass("android.os.Build$VERSION").SDK_INT <= 28:
+                request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
+        except Exception:
+            pass
+
+    def _publish_to_downloads(self, paths: list[Path]) -> str:
+        """Copy results into the user-visible Downloads/SimmcGDP folder."""
+        if platform != "android":
+            return str(self.output_dir)
+        from jnius import autoclass
+
+        sdk = autoclass("android.os.Build$VERSION").SDK_INT
+        Environment = autoclass("android.os.Environment")
+        if sdk <= 28:
+            downloads = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS
+            )
+            target_dir = Path(str(downloads.getAbsolutePath())) / "SimmcGDP"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            for path in paths:
+                (target_dir / path.name).write_bytes(path.read_bytes())
+            return str(target_dir)
+
+        MediaStore = autoclass("android.provider.MediaStore")
+        ContentValues = autoclass("android.content.ContentValues")
+        activity = autoclass("org.kivy.android.PythonActivity").mActivity
+        resolver = activity.getContentResolver()
+        collection = MediaStore.Downloads.getContentUri(
+            MediaStore.VOLUME_EXTERNAL_PRIMARY
+        )
+        mime_types = {
+            ".txt": "text/plain",
+            ".html": "text/html",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+        for path in paths:
+            values = ContentValues()
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, path.name)
+            values.put(MediaStore.MediaColumns.MIME_TYPE, mime_types.get(path.suffix, "application/octet-stream"))
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/SimmcGDP")
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1)
+            uri = resolver.insert(collection, values)
+            if uri is None:
+                raise OSError(f"无法在下载目录创建 {path.name}")
+            stream = resolver.openOutputStream(uri)
+            try:
+                stream.write(bytearray(path.read_bytes()))
+                stream.flush()
+            finally:
+                stream.close()
+            ready = ContentValues()
+            ready.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            resolver.update(uri, ready, None, None)
+        return "内部存储/Download/SimmcGDP"
+
+    def locate_files(self) -> None:
+        """Open Android's system file manager at the result directory."""
+        if platform != "android":
+            self.status = f"文件位置：{self.output_dir}"
             return
         try:
             from jnius import autoclass
 
             Intent = autoclass("android.content.Intent")
-            String = autoclass("java.lang.String")
-            intent = Intent()
-            intent.setAction(Intent.ACTION_SEND)
-            intent.setType("text/plain")
-            intent.putExtra(Intent.EXTRA_SUBJECT, String("Simmc 信息生成结果"))
-            intent.putExtra(Intent.EXTRA_TEXT, String(share_text))
-            chooser = Intent.createChooser(intent, String("分享结果"))
-            autoclass("org.kivy.android.PythonActivity").mActivity.startActivity(chooser)
+            Uri = autoclass("android.net.Uri")
+            DocumentsContract = autoclass("android.provider.DocumentsContract")
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            folder_uri = Uri.parse(
+                "content://com.android.externalstorage.documents/document/primary%3ADownload%2FSimmcGDP"
+            )
+            intent = Intent(Intent.ACTION_VIEW)
+            intent.setDataAndType(folder_uri, "vnd.android.document/directory")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            try:
+                activity.startActivity(intent)
+            except Exception:
+                picker = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                picker.putExtra(DocumentsContract.EXTRA_INITIAL_URI, folder_uri)
+                activity.startActivity(picker)
         except Exception as exc:
-            self.status = f"无法打开系统分享：{exc}"
+            self.status = f"无法打开文件管理器：{exc}\n文件位于 Download/SimmcGDP"
 
 
 if __name__ == "__main__":
