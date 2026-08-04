@@ -1,5 +1,5 @@
 [app]
-title = Simmc GDP
+title = SMC信息生成器
 package.name = simmcgdp
 package.domain = cn.simmc
 source.dir = .
@@ -11,7 +11,7 @@ orientation = portrait
 fullscreen = 0
 icon.filename = assets/simmc.png
 
-android.permissions = INTERNET
+android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE
 android.api = 35
 android.minapi = 24
 android.ndk = 27c
