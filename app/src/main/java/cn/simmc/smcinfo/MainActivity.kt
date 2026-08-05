@@ -145,7 +145,7 @@ private fun MainScreen(activity: MainActivity, modifier: Modifier = Modifier) {
             Button(
                 onClick = {
                 if (!listOf(tasks.gdp, tasks.territories, tasks.chunks, tasks.capitals, tasks.gateways, tasks.population).any { it }) { status = "请至少选择一种输出内容。"; return@Button }
-                busy = true; hasResults = false; status = "正在下载并处理地图数据……"
+                busy = true; hasResults = false; status = "正在下载并处理地图数据……请耐心等待"
                 scope.launch {
                     runCatching { withContext(Dispatchers.IO) { val map = SimmcData.downloadAndParse(); val reports = Reports.generate(map, tasks, format); activity.saveReports(reports); map to reports.size } }
                         .onSuccess { (map, count) -> status = "生成完成：$count 个 ${format.name} 文件。\n解析 ${map.lands.size} 块领地。\n保存到 Download/SMap_file"; hasResults = true }
