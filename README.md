@@ -2,7 +2,7 @@
 
 使用 Kotlin、Jetpack Compose 和 Material 3 编写的原生 Android 应用。应用从
 `map.simmc.cn`（simmc） 获取地图标记，生成国家 GDP、领地、区块、首都坐标、交通节点和
-人口排行，并将 TXT、HTML 或 XLSX 文件保存到 `Download/SMap_file`。
+人口排行，并将 TXT、HTML 或 XLSX 文件保存到手机目录 `Download/SMap_file` 中。
 
 ## 编译
 
