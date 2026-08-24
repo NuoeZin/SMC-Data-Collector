@@ -13,7 +13,7 @@
 - Android SDK Build-Tools 35
 
 
-## 功能
+## 说明
 
 - Jetpack Compose Material 3原生界面
 - 默认亮色，可在右上角设置中切换暗色
