@@ -17,7 +17,6 @@
 
 - Jetpack Compose Material 3原生界面
 - 默认亮色，可在右上角设置中切换暗色
-- 设置中显示关于信息
 - 首次启动显示存储说明，Android 9及以下请求系统存储权限
 - Android 10及以上通过 MediaStore写入公共下载目录
 - “定位文件”打开 `Download/SMap_file`
