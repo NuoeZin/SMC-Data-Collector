@@ -1,0 +1,2 @@
+rootProject.name = 'SMC-Data-Collector-Java'
+include ':app'
