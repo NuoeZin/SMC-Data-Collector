@@ -94,7 +94,7 @@ public final class Reports {
     private static SimmcData.Land findLand(double x,double z,List<SimmcData.Land> lands){SimmcData.Land best=null;double bestArea=Double.MAX_VALUE;for(SimmcData.Land l:lands)for(List<SimmcData.Point> p:l.polygons)if(pointInPolygon(x,z,p)){double minX=p.get(0).x,maxX=minX,minZ=p.get(0).z,maxZ=minZ;for(SimmcData.Point q:p){if(q.x<minX)minX=q.x;if(q.x>maxX)maxX=q.x;if(q.z<minZ)minZ=q.z;if(q.z>maxZ)maxZ=q.z;}double area=(maxX-minX)*(maxZ-minZ);if(area<bestArea){bestArea=area;best=l;}}return best;}
     private static boolean pointInPolygon(double x,double z,List<SimmcData.Point> p){if(p.size()<3)return false;boolean inside=false;int j=p.size()-1;for(int i=0;i<p.size();i++){SimmcData.Point a=p.get(i),b=p.get(j);if((a.z>z)!=(b.z>z)&&x<(b.x-a.x)*(z-a.z)/(b.z-a.z)+a.x)inside=!inside;j=i;}return inside;}
 
-    /** 文件名统一附加时间戳，避免重名并保持一次任务内文件成组。 */
+    /** 文件名后面都加了时间戳，文件夹也是，分别不同版本的时间区分 */
     private static String stamped(String base, String ext, String stamp) {
         if (stamp == null || stamp.length() == 0) return base + ext;
         return base + "_" + stamp + ext;
