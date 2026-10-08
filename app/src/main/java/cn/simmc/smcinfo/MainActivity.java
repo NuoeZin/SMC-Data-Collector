@@ -93,7 +93,7 @@ public class MainActivity extends Activity {
         updateCacheInfo();
         requestLegacyStorageIfNeeded();
         appendLog("应用启动：SMC 信息生成器", ACCENT);
-        appendLog("Mon3tr 已就位！", MUTED);
+        appendLog("Mon3tr 已就位！", ACCENT);
         appendLog("地图数据使用临时缓存，生成成功后可自动清除。", MUTED);
     }
 
@@ -402,7 +402,7 @@ public class MainActivity extends Activity {
         });
         content.addView(about, new LinearLayout.LayoutParams(-1, dp(42)));
 
-        TextView note = text("比比拉布", 12, MUTED);
+        TextView note = text("v2.3.0  by NuoeZin", 12, MUTED);
         note.setPadding(dp(4), dp(12), dp(4), 0);
         content.addView(note, new LinearLayout.LayoutParams(-1, dp(48)));
         return page;
