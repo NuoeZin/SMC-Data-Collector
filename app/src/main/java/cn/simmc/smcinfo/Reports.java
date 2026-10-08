@@ -29,10 +29,14 @@ public final class Reports {
     private static String row(Object... values){StringBuilder s=new StringBuilder();for(int i=0;i<values.length;i++){if(i>0)s.append('\t');s.append(values[i]==null?"":String.valueOf(values[i]));}return s.toString();}
 
     public static List<Report> generate(SimmcData.ParsedMap map, boolean[] tasks, int format) throws Exception {
-        return generate(map, tasks, format, null);
+        return generate(map, tasks, format, null, null);
     }
 
     public static List<Report> generate(SimmcData.ParsedMap map, boolean[] tasks, int format, ProgressListener listener) throws Exception {
+        return generate(map, tasks, format, null, listener);
+    }
+
+    public static List<Report> generate(SimmcData.ParsedMap map, boolean[] tasks, int format, String stamp, ProgressListener listener) throws Exception {
         notify(listener, "正在按国家整理 " + map.lands.size() + " 个领地…", 0);
         Map<String,List<SimmcData.Land>> grouped=new LinkedHashMap<String,List<SimmcData.Land>>();
         for(SimmcData.Land l:map.lands) if(l.nation!=null){if(!grouped.containsKey(l.nation))grouped.put(l.nation,new ArrayList<SimmcData.Land>());grouped.get(l.nation).add(l);}
@@ -64,7 +68,7 @@ public final class Reports {
         List<Report> out=new ArrayList<Report>();
         int converted=0;
         for(Map.Entry<String,String>e:texts.entrySet()){
-            out.add(convert(e.getKey(),e.getValue(),format));
+            out.add(convert(e.getKey(),e.getValue(),format,stamp));
             converted++;
             notify(listener, "文件转换进度：" + converted + "/" + texts.size() + " —— " + e.getKey(), 0);
         }
@@ -90,7 +94,13 @@ public final class Reports {
     private static SimmcData.Land findLand(double x,double z,List<SimmcData.Land> lands){SimmcData.Land best=null;double bestArea=Double.MAX_VALUE;for(SimmcData.Land l:lands)for(List<SimmcData.Point> p:l.polygons)if(pointInPolygon(x,z,p)){double minX=p.get(0).x,maxX=minX,minZ=p.get(0).z,maxZ=minZ;for(SimmcData.Point q:p){if(q.x<minX)minX=q.x;if(q.x>maxX)maxX=q.x;if(q.z<minZ)minZ=q.z;if(q.z>maxZ)maxZ=q.z;}double area=(maxX-minX)*(maxZ-minZ);if(area<bestArea){bestArea=area;best=l;}}return best;}
     private static boolean pointInPolygon(double x,double z,List<SimmcData.Point> p){if(p.size()<3)return false;boolean inside=false;int j=p.size()-1;for(int i=0;i<p.size();i++){SimmcData.Point a=p.get(i),b=p.get(j);if((a.z>z)!=(b.z>z)&&x<(b.x-a.x)*(z-a.z)/(b.z-a.z)+a.x)inside=!inside;j=i;}return inside;}
 
-    private static Report convert(String name,String text,int format){if(format==TXT)return new Report(name+".txt","text/plain",bom(text));if(format==XLSX)return new Report(name+".xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",Xlsx.create(text));return new Report(name+".html","text/html",html(name,text).getBytes(java.nio.charset.Charset.forName("UTF-8")));}
+    /** 文件名统一附加时间戳，避免重名并保持一次任务内文件成组。 */
+    private static String stamped(String base, String ext, String stamp) {
+        if (stamp == null || stamp.length() == 0) return base + ext;
+        return base + "_" + stamp + ext;
+    }
+
+    private static Report convert(String name,String text,int format,String stamp){if(format==TXT)return new Report(stamped(name,".txt",stamp),"text/plain",bom(text));if(format==XLSX)return new Report(stamped(name,".xlsx",stamp),"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",Xlsx.create(text));return new Report(stamped(name,".html",stamp),"text/html",html(name,text).getBytes(java.nio.charset.Charset.forName("UTF-8")));}
     private static byte[] bom(String s){byte[] b=s.getBytes(java.nio.charset.Charset.forName("UTF-8"));byte[] o=new byte[b.length+3];o[0]=(byte)0xEF;o[1]=(byte)0xBB;o[2]=(byte)0xBF;System.arraycopy(b,0,o,3,b.length);return o;}
     private static String html(String name,String text){StringBuilder s=new StringBuilder("<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>");s.append(esc(name)).append("</title><style>body{font-family:sans-serif;margin:24px}table{border-collapse:collapse;width:100%}td{border:1px solid #bbb;padding:6px}tr:first-child{font-weight:bold;background:#eee}</style><h1>").append(esc(name)).append("</h1><table>");String[] lines=text.split("\\n",-1);for(String line:lines){s.append("<tr>");String[] cells=line.split("\\t",-1);for(String c:cells)s.append("<td>").append(esc(c)).append("</td>");s.append("</tr>");}return s.append("</table></html>").toString();}
     private static String esc(String s){return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;");}
