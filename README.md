@@ -15,6 +15,10 @@ SMC Data Collector 是一个用于获取和整理 simmc 世界网页卫星地图
 
 - Android 4.4及以上
 
+## 资源引用
+
+- 界面图标来自 Google Material Design Icons
+
 ## 开源协议
 
 本项目采用 MIT License 开源协议。
