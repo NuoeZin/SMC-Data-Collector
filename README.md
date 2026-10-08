@@ -21,8 +21,7 @@ SMC Data Collector 是一个用于获取和整理 simmc 世界网页卫星地图
 
 ## 开源协议
 
-本项目采用 [MIT License](LICENSE) 发布。
-Copyright (c) 2026 NuoeZin
+本项目采用 MIT [License](LICENSE) 发布。
 
 ## 说明
 
