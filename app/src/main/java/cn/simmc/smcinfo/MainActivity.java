@@ -30,8 +30,11 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.PopupWindow;
@@ -73,6 +76,7 @@ public class MainActivity extends Activity {
     private TextView logView;
     private TextView generateButton;
     private TextView formatValue;
+    private ImageView formatArrow;
     private ModernSwitch autoClearSwitch;
     private File cacheDir;
     private File mapCache;
@@ -82,6 +86,13 @@ public class MainActivity extends Activity {
     private final StringBuilder rawLog = new StringBuilder();
     private final SpannableStringBuilder logBuilder = new SpannableStringBuilder();
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.US);
+
+    /** 记录格式选择器箭头当前旋转角度，0 或 180 */
+    private float formatArrowRotation = 0f;
+    /** 当前显示的关于弹窗 overlay，用于返回键拦截 */
+    private FrameLayout infoOverlay;
+    /** 关于弹窗是否正在显示 */
+    private boolean infoPanelShowing = false;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -352,14 +363,30 @@ public class MainActivity extends Activity {
         final LinearLayout formatRow = settingRow();
         TextView formatLabel = text("默认输出格式", 14, TEXT);
         formatRow.addView(formatLabel, new LinearLayout.LayoutParams(0, dp(46), 1));
+
+        // 右侧：文字与箭头拆分为独立控件，放在一个横向容器里；只旋转箭头 ImageView
+        LinearLayout formatSelector = new LinearLayout(this);
+        formatSelector.setOrientation(LinearLayout.HORIZONTAL);
+        formatSelector.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+
         formatValue = text(formatName(prefs.getInt("format", Reports.HTML)), 14, ACCENT_DARK);
-        formatValue.setCompoundDrawablesWithIntrinsicBounds(0, 0, getResources().getIdentifier("ic_arrow_drop_down", "drawable", getPackageName()), 0);
-        formatValue.setCompoundDrawablePadding(dp(2));
-        formatValue.setGravity(Gravity.CENTER);
+        formatValue.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
         formatValue.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        formatRow.addView(formatValue, new LinearLayout.LayoutParams(dp(110), dp(46)));
+        formatSelector.addView(formatValue, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(46)));
+
+        formatArrow = new ImageView(this);
+        int arrowId = getResources().getIdentifier("ic_arrow_drop_down", "drawable", getPackageName());
+        if (arrowId != 0) formatArrow.setImageResource(arrowId);
+        formatArrow.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        LinearLayout.LayoutParams arrowParams = new LinearLayout.LayoutParams(dp(22), dp(46));
+        arrowParams.leftMargin = dp(2);
+        formatSelector.addView(formatArrow, arrowParams);
+
+        formatRow.addView(formatSelector, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(46)));
         formatRow.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { showFormatPopup(formatValue); }
+            @Override public void onClick(View v) { showFormatPopup(formatArrow); }
         });
         content.addView(formatRow);
 
@@ -455,7 +482,41 @@ public class MainActivity extends Activity {
         popup.setOutsideTouchable(true);
         popup.setFocusable(true);
         if (Build.VERSION.SDK_INT >= 21) popup.setElevation(dp(5));
+
+        // 展开时箭头顺时针旋转 180°
+        rotateFormatArrow(true);
+
+        // 收起时（无论选择还是点击外部关闭）逆时针旋转回 0°
+        popup.setOnDismissListener(new PopupWindow.OnDismissListener() {
+            @Override public void onDismiss() {
+                rotateFormatArrow(false);
+            }
+        });
+
         popup.showAsDropDown(anchor, -dp(48), dp(2));
+    }
+
+    /**
+     * 旋转格式选择器箭头（仅旋转独立的 ImageView，不影响文字）。
+     * @param expand true 表示展开（顺时针 180°），false 表示收起（逆时针回到 0°）
+     */
+    private void rotateFormatArrow(final boolean expand) {
+        if (formatArrow == null) return;
+        final float to = expand ? 180f : 0f;
+        if (formatArrowRotation == to) return;
+
+        formatArrow.animate().cancel();
+        formatArrow.animate()
+                .rotation(to)
+                .setDuration(200)
+                .setInterpolator(expand ? new DecelerateInterpolator() : new AccelerateDecelerateInterpolator())
+                .withEndAction(new Runnable() {
+                    @Override public void run() {
+                        formatArrowRotation = to;
+                    }
+                })
+                .start();
+        formatArrowRotation = to;
     }
 
     private String formatName(int f) {
@@ -482,6 +543,11 @@ public class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
+        // 关于弹窗优先：有弹窗时先关闭弹窗
+        if (infoPanelShowing && infoOverlay != null) {
+            dismissInfoPanel();
+            return;
+        }
         if (settingsOpen) { closeSettings(); return; }
         super.onBackPressed();
     }
@@ -750,13 +816,27 @@ public class MainActivity extends Activity {
         Toast.makeText(this, "输出目录：Download/SMap_file", Toast.LENGTH_LONG).show();
     }
 
+    /**
+     * 显示信息弹窗（关于面板）。
+     * 改进点：
+     * 1) overlay 覆盖整个 pageRoot 且可点击，拦截背景触摸；
+     * 2) 弹出时缩放 + 淡入动画，关闭时缩放 + 淡出动画；
+     * 3) 返回键优先关闭弹窗。
+     */
     private void showInfoPanel(String titleText, String bodyText) {
+        if (infoPanelShowing) return;
+
         final FrameLayout overlay = new FrameLayout(this);
         overlay.setBackgroundColor(Color.argb(90, 0, 0, 0));
+        // 关键：让 overlay 自己成为可点击的 View，拦截所有触摸事件，防止穿透到底层
+        overlay.setClickable(true);
+        overlay.setFocusable(true);
+
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(14), dp(18), dp(12));
         card.setBackgroundDrawable(bg(Color.WHITE, 4));
+
         TextView title = text(titleText, 18, TEXT);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         card.addView(title, new LinearLayout.LayoutParams(-1, dp(38)));
@@ -775,14 +855,52 @@ public class MainActivity extends Activity {
 
         TextView close = action("关闭", ACCENT, Color.WHITE);
         close.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { pageRoot.removeView(overlay); }
+            @Override public void onClick(View v) { dismissInfoPanel(); }
         });
         card.addView(close, new LinearLayout.LayoutParams(-1, dp(42)));
+
         FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(-1, dp(340), Gravity.CENTER);
         cp.leftMargin = dp(20); cp.rightMargin = dp(20);
         overlay.addView(card, cp);
+
         pageRoot.addView(overlay, new FrameLayout.LayoutParams(-1, -1));
         overlay.bringToFront();
+
+        // 保存引用并标记显示中
+        infoOverlay = overlay;
+        infoPanelShowing = true;
+
+        // 弹出动画：整体淡入 + 卡片缩放
+        overlay.setAlpha(0f);
+        card.setScaleX(0.86f);
+        card.setScaleY(0.86f);
+        overlay.animate().alpha(1f).setDuration(180).setInterpolator(new DecelerateInterpolator()).start();
+        card.animate()
+                .scaleX(1f).scaleY(1f)
+                .setDuration(220)
+                .setInterpolator(new OvershootInterpolator(1.1f))
+                .start();
+    }
+
+    /**
+     * 关闭信息弹窗，带缩小 + 淡出动画。
+     */
+    private void dismissInfoPanel() {
+        if (!infoPanelShowing || infoOverlay == null) return;
+        final FrameLayout overlay = infoOverlay;
+        final View card = overlay.getChildAt(0);
+        infoPanelShowing = false;
+        infoOverlay = null;
+
+        overlay.animate().alpha(0f).setDuration(150).setInterpolator(new AccelerateDecelerateInterpolator())
+                .withEndAction(new Runnable() {
+                    @Override public void run() {
+                        pageRoot.removeView(overlay);
+                    }
+                }).start();
+        if (card != null) {
+            card.animate().scaleX(0.86f).scaleY(0.86f).setDuration(150).setInterpolator(new AccelerateDecelerateInterpolator()).start();
+        }
     }
 
     private static class ModernSwitch extends View {
