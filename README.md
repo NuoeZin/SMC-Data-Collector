@@ -1,6 +1,6 @@
 # SMC Data Collector
 
-SMC Data Collector 是一个用于获取和整理 simmc 世界网页卫星地图数据的 Android 小工具。
+SMC Data Collector 是一个用于获取和整理 simmc（simmc 是一个社区庞大的国家模拟 Minecraft 服务器） 世界网页卫星地图数据的 Android 小工具。
 
 本项目为原项目的 Java 语言重制版本，主要用于从 simmc 地图数据中提取国家、领地等信息，并生成便于查看的统计报告。
 
